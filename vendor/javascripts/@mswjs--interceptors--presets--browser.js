@@ -1,13 +1,609 @@
-// src/interceptors/fetch/index.ts
-import { invariant as invariant2 } from "outvariant";
-import { DeferredPromise as DeferredPromise3 } from "@open-draft/deferred-promise";
+// node_modules/.pnpm/outvariant@1.4.3/node_modules/outvariant/lib/index.mjs
+var POSITIONALS_EXP = /(%?)(%([sdijo]))/g;
+function serializePositional(positional, flag) {
+  switch (flag) {
+    case "s":
+      return positional;
+    case "d":
+    case "i":
+      return Number(positional);
+    case "j":
+      return JSON.stringify(positional);
+    case "o": {
+      if (typeof positional === "string") {
+        return positional;
+      }
+      const json = JSON.stringify(positional);
+      if (json === "{}" || json === "[]" || /^\[object .+?\]$/.test(json)) {
+        return positional;
+      }
+      return json;
+    }
+  }
+}
+function format(message, ...positionals) {
+  if (positionals.length === 0) {
+    return message;
+  }
+  let positionalIndex = 0;
+  let formattedMessage = message.replace(
+    POSITIONALS_EXP,
+    (match, isEscaped, _, flag) => {
+      const positional = positionals[positionalIndex];
+      const value = serializePositional(positional, flag);
+      if (!isEscaped) {
+        positionalIndex++;
+        return value;
+      }
+      return match;
+    }
+  );
+  if (positionalIndex < positionals.length) {
+    formattedMessage += ` ${positionals.slice(positionalIndex).join(" ")}`;
+  }
+  formattedMessage = formattedMessage.replace(/%{2,2}/g, "%");
+  return formattedMessage;
+}
+var STACK_FRAMES_TO_IGNORE = 2;
+function cleanErrorStack(error2) {
+  if (!error2.stack) {
+    return;
+  }
+  const nextStack = error2.stack.split("\n");
+  nextStack.splice(1, STACK_FRAMES_TO_IGNORE);
+  error2.stack = nextStack.join("\n");
+}
+var InvariantError = class extends Error {
+  constructor(message, ...positionals) {
+    super(message);
+    this.message = message;
+    this.name = "Invariant Violation";
+    this.message = format(message, ...positionals);
+    cleanErrorStack(this);
+  }
+};
+var invariant = (predicate, message, ...positionals) => {
+  if (!predicate) {
+    throw new InvariantError(message, ...positionals);
+  }
+};
+invariant.as = (ErrorConstructor, predicate, message, ...positionals) => {
+  if (!predicate) {
+    const formatMessage = positionals.length === 0 ? message : format(message, ...positionals);
+    let error2;
+    try {
+      error2 = Reflect.construct(ErrorConstructor, [
+        formatMessage
+      ]);
+    } catch (err) {
+      error2 = ErrorConstructor(formatMessage);
+    }
+    throw error2;
+  }
+};
+
+// node_modules/.pnpm/@open-draft+deferred-promise@2.2.0/node_modules/@open-draft/deferred-promise/build/index.mjs
+function createDeferredExecutor() {
+  const executor = (resolve, reject) => {
+    executor.state = "pending";
+    executor.resolve = (data) => {
+      if (executor.state !== "pending") {
+        return;
+      }
+      executor.result = data;
+      const onFulfilled = (value) => {
+        executor.state = "fulfilled";
+        return value;
+      };
+      return resolve(
+        data instanceof Promise ? data : Promise.resolve(data).then(onFulfilled)
+      );
+    };
+    executor.reject = (reason) => {
+      if (executor.state !== "pending") {
+        return;
+      }
+      queueMicrotask(() => {
+        executor.state = "rejected";
+      });
+      return reject(executor.rejectionReason = reason);
+    };
+  };
+  return executor;
+}
+var DeferredPromise = class extends Promise {
+  #executor;
+  resolve;
+  reject;
+  constructor(executor = null) {
+    const deferredExecutor = createDeferredExecutor();
+    super((originalResolve, originalReject) => {
+      deferredExecutor(originalResolve, originalReject);
+      executor?.(deferredExecutor.resolve, deferredExecutor.reject);
+    });
+    this.#executor = deferredExecutor;
+    this.resolve = this.#executor.resolve;
+    this.reject = this.#executor.reject;
+  }
+  get state() {
+    return this.#executor.state;
+  }
+  get rejectionReason() {
+    return this.#executor.rejectionReason;
+  }
+  then(onFulfilled, onRejected) {
+    return this.#decorate(super.then(onFulfilled, onRejected));
+  }
+  catch(onRejected) {
+    return this.#decorate(super.catch(onRejected));
+  }
+  finally(onfinally) {
+    return this.#decorate(super.finally(onfinally));
+  }
+  #decorate(promise) {
+    return Object.defineProperties(promise, {
+      resolve: { configurable: true, value: this.resolve },
+      reject: { configurable: true, value: this.reject }
+    });
+  }
+};
 
 // src/glossary.ts
 var IS_PATCHED_MODULE = Symbol("isPatchedModule");
 
+// node_modules/.pnpm/is-node-process@1.2.0/node_modules/is-node-process/lib/index.mjs
+function isNodeProcess() {
+  if (typeof navigator !== "undefined" && navigator.product === "ReactNative") {
+    return true;
+  }
+  if (typeof process !== "undefined") {
+    const type = process.type;
+    if (type === "renderer" || type === "worker") {
+      return false;
+    }
+    return !!(process.versions && process.versions.node);
+  }
+  return false;
+}
+
+// node_modules/.pnpm/@open-draft+logger@0.3.0/node_modules/@open-draft/logger/lib/index.mjs
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var colors_exports = {};
+__export(colors_exports, {
+  blue: () => blue,
+  gray: () => gray,
+  green: () => green,
+  red: () => red,
+  yellow: () => yellow
+});
+function yellow(text) {
+  return `\x1B[33m${text}\x1B[0m`;
+}
+function blue(text) {
+  return `\x1B[34m${text}\x1B[0m`;
+}
+function gray(text) {
+  return `\x1B[90m${text}\x1B[0m`;
+}
+function red(text) {
+  return `\x1B[31m${text}\x1B[0m`;
+}
+function green(text) {
+  return `\x1B[32m${text}\x1B[0m`;
+}
+var IS_NODE = isNodeProcess();
+var Logger = class {
+  constructor(name) {
+    this.name = name;
+    this.prefix = `[${this.name}]`;
+    const LOGGER_NAME = getVariable("DEBUG");
+    const LOGGER_LEVEL = getVariable("LOG_LEVEL");
+    const isLoggingEnabled = LOGGER_NAME === "1" || LOGGER_NAME === "true" || typeof LOGGER_NAME !== "undefined" && this.name.startsWith(LOGGER_NAME);
+    if (isLoggingEnabled) {
+      this.debug = isDefinedAndNotEquals(LOGGER_LEVEL, "debug") ? noop : this.debug;
+      this.info = isDefinedAndNotEquals(LOGGER_LEVEL, "info") ? noop : this.info;
+      this.success = isDefinedAndNotEquals(LOGGER_LEVEL, "success") ? noop : this.success;
+      this.warning = isDefinedAndNotEquals(LOGGER_LEVEL, "warning") ? noop : this.warning;
+      this.error = isDefinedAndNotEquals(LOGGER_LEVEL, "error") ? noop : this.error;
+    } else {
+      this.info = noop;
+      this.success = noop;
+      this.warning = noop;
+      this.error = noop;
+      this.only = noop;
+    }
+  }
+  prefix;
+  extend(domain) {
+    return new Logger(`${this.name}:${domain}`);
+  }
+  /**
+   * Print a debug message.
+   * @example
+   * logger.debug('no duplicates found, creating a document...')
+   */
+  debug(message, ...positionals) {
+    this.logEntry({
+      level: "debug",
+      message: gray(message),
+      positionals,
+      prefix: this.prefix,
+      colors: {
+        prefix: "gray"
+      }
+    });
+  }
+  /**
+   * Print an info message.
+   * @example
+   * logger.info('start parsing...')
+   */
+  info(message, ...positionals) {
+    this.logEntry({
+      level: "info",
+      message,
+      positionals,
+      prefix: this.prefix,
+      colors: {
+        prefix: "blue"
+      }
+    });
+    const performance2 = new PerformanceEntry();
+    return (message2, ...positionals2) => {
+      performance2.measure();
+      this.logEntry({
+        level: "info",
+        message: `${message2} ${gray(`${performance2.deltaTime}ms`)}`,
+        positionals: positionals2,
+        prefix: this.prefix,
+        colors: {
+          prefix: "blue"
+        }
+      });
+    };
+  }
+  /**
+   * Print a success message.
+   * @example
+   * logger.success('successfully created document')
+   */
+  success(message, ...positionals) {
+    this.logEntry({
+      level: "info",
+      message,
+      positionals,
+      prefix: `\u2714 ${this.prefix}`,
+      colors: {
+        timestamp: "green",
+        prefix: "green"
+      }
+    });
+  }
+  /**
+   * Print a warning.
+   * @example
+   * logger.warning('found legacy document format')
+   */
+  warning(message, ...positionals) {
+    this.logEntry({
+      level: "warning",
+      message,
+      positionals,
+      prefix: `\u26A0 ${this.prefix}`,
+      colors: {
+        timestamp: "yellow",
+        prefix: "yellow"
+      }
+    });
+  }
+  /**
+   * Print an error message.
+   * @example
+   * logger.error('something went wrong')
+   */
+  error(message, ...positionals) {
+    this.logEntry({
+      level: "error",
+      message,
+      positionals,
+      prefix: `\u2716 ${this.prefix}`,
+      colors: {
+        timestamp: "red",
+        prefix: "red"
+      }
+    });
+  }
+  /**
+   * Execute the given callback only when the logging is enabled.
+   * This is skipped in its entirety and has no runtime cost otherwise.
+   * This executes regardless of the log level.
+   * @example
+   * logger.only(() => {
+   *   logger.info('additional info')
+   * })
+   */
+  only(callback) {
+    callback();
+  }
+  createEntry(level, message) {
+    return {
+      timestamp: /* @__PURE__ */ new Date(),
+      level,
+      message
+    };
+  }
+  logEntry(args) {
+    const {
+      level,
+      message,
+      prefix,
+      colors: customColors,
+      positionals = []
+    } = args;
+    const entry = this.createEntry(level, message);
+    const timestampColor = customColors?.timestamp || "gray";
+    const prefixColor = customColors?.prefix || "gray";
+    const colorize = {
+      timestamp: colors_exports[timestampColor],
+      prefix: colors_exports[prefixColor]
+    };
+    const write = this.getWriter(level);
+    write(
+      [colorize.timestamp(this.formatTimestamp(entry.timestamp))].concat(prefix != null ? colorize.prefix(prefix) : []).concat(serializeInput(message)).join(" "),
+      ...positionals.map(serializeInput)
+    );
+  }
+  formatTimestamp(timestamp) {
+    return `${timestamp.toLocaleTimeString(
+      "en-GB"
+    )}:${timestamp.getMilliseconds()}`;
+  }
+  getWriter(level) {
+    switch (level) {
+      case "debug":
+      case "success":
+      case "info": {
+        return log;
+      }
+      case "warning": {
+        return warn;
+      }
+      case "error": {
+        return error;
+      }
+    }
+  }
+};
+var PerformanceEntry = class {
+  startTime;
+  endTime;
+  deltaTime;
+  constructor() {
+    this.startTime = performance.now();
+  }
+  measure() {
+    this.endTime = performance.now();
+    const deltaTime = this.endTime - this.startTime;
+    this.deltaTime = deltaTime.toFixed(2);
+  }
+};
+var noop = () => void 0;
+function log(message, ...positionals) {
+  if (IS_NODE) {
+    process.stdout.write(format(message, ...positionals) + "\n");
+    return;
+  }
+  console.log(message, ...positionals);
+}
+function warn(message, ...positionals) {
+  if (IS_NODE) {
+    process.stderr.write(format(message, ...positionals) + "\n");
+    return;
+  }
+  console.warn(message, ...positionals);
+}
+function error(message, ...positionals) {
+  if (IS_NODE) {
+    process.stderr.write(format(message, ...positionals) + "\n");
+    return;
+  }
+  console.error(message, ...positionals);
+}
+function getVariable(variableName) {
+  if (IS_NODE) {
+    return process.env[variableName];
+  }
+  return globalThis[variableName]?.toString();
+}
+function isDefinedAndNotEquals(value, expected) {
+  return value !== void 0 && value !== expected;
+}
+function serializeInput(message) {
+  if (typeof message === "undefined") {
+    return "undefined";
+  }
+  if (message === null) {
+    return "null";
+  }
+  if (typeof message === "string") {
+    return message;
+  }
+  if (typeof message === "object") {
+    return JSON.stringify(message);
+  }
+  return message.toString();
+}
+
+// node_modules/.pnpm/strict-event-emitter@0.5.1/node_modules/strict-event-emitter/lib/index.mjs
+var MemoryLeakError = class extends Error {
+  constructor(emitter, type, count) {
+    super(
+      `Possible EventEmitter memory leak detected. ${count} ${type.toString()} listeners added. Use emitter.setMaxListeners() to increase limit`
+    );
+    this.emitter = emitter;
+    this.type = type;
+    this.count = count;
+    this.name = "MaxListenersExceededWarning";
+  }
+};
+var _Emitter = class {
+  static listenerCount(emitter, eventName) {
+    return emitter.listenerCount(eventName);
+  }
+  constructor() {
+    this.events = /* @__PURE__ */ new Map();
+    this.maxListeners = _Emitter.defaultMaxListeners;
+    this.hasWarnedAboutPotentialMemoryLeak = false;
+  }
+  _emitInternalEvent(internalEventName, eventName, listener) {
+    this.emit(
+      internalEventName,
+      ...[eventName, listener]
+    );
+  }
+  _getListeners(eventName) {
+    return Array.prototype.concat.apply([], this.events.get(eventName)) || [];
+  }
+  _removeListener(listeners, listener) {
+    const index = listeners.indexOf(listener);
+    if (index > -1) {
+      listeners.splice(index, 1);
+    }
+    return [];
+  }
+  _wrapOnceListener(eventName, listener) {
+    const onceListener = (...data) => {
+      this.removeListener(eventName, onceListener);
+      return listener.apply(this, data);
+    };
+    Object.defineProperty(onceListener, "name", { value: listener.name });
+    return onceListener;
+  }
+  setMaxListeners(maxListeners) {
+    this.maxListeners = maxListeners;
+    return this;
+  }
+  /**
+   * Returns the current max listener value for the `Emitter` which is
+   * either set by `emitter.setMaxListeners(n)` or defaults to
+   * `Emitter.defaultMaxListeners`.
+   */
+  getMaxListeners() {
+    return this.maxListeners;
+  }
+  /**
+   * Returns an array listing the events for which the emitter has registered listeners.
+   * The values in the array will be strings or Symbols.
+   */
+  eventNames() {
+    return Array.from(this.events.keys());
+  }
+  /**
+   * Synchronously calls each of the listeners registered for the event named `eventName`,
+   * in the order they were registered, passing the supplied arguments to each.
+   * Returns `true` if the event has listeners, `false` otherwise.
+   *
+   * @example
+   * const emitter = new Emitter<{ hello: [string] }>()
+   * emitter.emit('hello', 'John')
+   */
+  emit(eventName, ...data) {
+    const listeners = this._getListeners(eventName);
+    listeners.forEach((listener) => {
+      listener.apply(this, data);
+    });
+    return listeners.length > 0;
+  }
+  addListener(eventName, listener) {
+    this._emitInternalEvent("newListener", eventName, listener);
+    const nextListeners = this._getListeners(eventName).concat(listener);
+    this.events.set(eventName, nextListeners);
+    if (this.maxListeners > 0 && this.listenerCount(eventName) > this.maxListeners && !this.hasWarnedAboutPotentialMemoryLeak) {
+      this.hasWarnedAboutPotentialMemoryLeak = true;
+      const memoryLeakWarning = new MemoryLeakError(
+        this,
+        eventName,
+        this.listenerCount(eventName)
+      );
+      console.warn(memoryLeakWarning);
+    }
+    return this;
+  }
+  on(eventName, listener) {
+    return this.addListener(eventName, listener);
+  }
+  once(eventName, listener) {
+    return this.addListener(
+      eventName,
+      this._wrapOnceListener(eventName, listener)
+    );
+  }
+  prependListener(eventName, listener) {
+    const listeners = this._getListeners(eventName);
+    if (listeners.length > 0) {
+      const nextListeners = [listener].concat(listeners);
+      this.events.set(eventName, nextListeners);
+    } else {
+      this.events.set(eventName, listeners.concat(listener));
+    }
+    return this;
+  }
+  prependOnceListener(eventName, listener) {
+    return this.prependListener(
+      eventName,
+      this._wrapOnceListener(eventName, listener)
+    );
+  }
+  removeListener(eventName, listener) {
+    const listeners = this._getListeners(eventName);
+    if (listeners.length > 0) {
+      this._removeListener(listeners, listener);
+      this.events.set(eventName, listeners);
+      this._emitInternalEvent("removeListener", eventName, listener);
+    }
+    return this;
+  }
+  /**
+   * Alias for `emitter.removeListener()`.
+   *
+   * @example
+   * emitter.off('hello', listener)
+   */
+  off(eventName, listener) {
+    return this.removeListener(eventName, listener);
+  }
+  removeAllListeners(eventName) {
+    if (eventName) {
+      this.events.delete(eventName);
+    } else {
+      this.events.clear();
+    }
+    return this;
+  }
+  /**
+   * Returns a copy of the array of listeners for the event named `eventName`.
+   */
+  listeners(eventName) {
+    return Array.from(this._getListeners(eventName));
+  }
+  /**
+   * Returns the number of listeners listening to the event named `eventName`.
+   */
+  listenerCount(eventName) {
+    return this._getListeners(eventName).length;
+  }
+  rawListeners(eventName) {
+    return this.listeners(eventName);
+  }
+};
+var Emitter = _Emitter;
+Emitter.defaultMaxListeners = 10;
+
 // src/Interceptor.ts
-import { Logger } from "@open-draft/logger";
-import { Emitter } from "strict-event-emitter";
 var INTERNAL_REQUEST_ID_HEADER_NAME = "x-interceptors-internal-request-id";
 function getGlobalSymbol(symbol) {
   return (
@@ -137,9 +733,8 @@ var Interceptor = class {
     this.readyState = "DISPOSED" /* DISPOSED */;
   }
   getInstance() {
-    var _a;
     const instance = getGlobalSymbol(this.symbol);
-    this.logger.info("retrieved global instance:", (_a = instance == null ? void 0 : instance.constructor) == null ? void 0 : _a.name);
+    this.logger.info("retrieved global instance:", instance?.constructor?.name);
     return instance;
   }
   setInstance() {
@@ -152,22 +747,19 @@ var Interceptor = class {
   }
 };
 
-// src/RequestController.ts
-import { invariant } from "outvariant";
-import { DeferredPromise } from "@open-draft/deferred-promise";
-
 // src/InterceptorError.ts
-var InterceptorError = class extends Error {
+var InterceptorError = class _InterceptorError extends Error {
   constructor(message) {
     super(message);
     this.name = "InterceptorError";
-    Object.setPrototypeOf(this, InterceptorError.prototype);
+    Object.setPrototypeOf(this, _InterceptorError.prototype);
   }
 };
 
 // src/RequestController.ts
 var kRequestHandled = Symbol("kRequestHandled");
 var kResponsePromise = Symbol("kResponsePromise");
+kResponsePromise, kRequestHandled;
 var RequestController = class {
   constructor(request) {
     this.request = request;
@@ -198,7 +790,7 @@ var RequestController = class {
    * controller.errorWith()
    * controller.errorWith(new Error('Oops!'))
    */
-  errorWith(error) {
+  errorWith(error2) {
     invariant.as(
       InterceptorError,
       !this[kRequestHandled],
@@ -207,10 +799,9 @@ var RequestController = class {
       this.request.url
     );
     this[kRequestHandled] = true;
-    this[kResponsePromise].resolve(error);
+    this[kResponsePromise].resolve(error2);
   }
 };
-kResponsePromise, kRequestHandled;
 
 // src/utils/emitAsync.ts
 async function emitAsync(emitter, eventName, ...data) {
@@ -223,16 +814,24 @@ async function emitAsync(emitter, eventName, ...data) {
   }
 }
 
-// src/utils/handleRequest.ts
-import { DeferredPromise as DeferredPromise2 } from "@open-draft/deferred-promise";
-import { until } from "@open-draft/until";
+// node_modules/.pnpm/@open-draft+until@2.1.0/node_modules/@open-draft/until/lib/index.mjs
+var until = async (promise) => {
+  try {
+    const data = await promise().catch((error2) => {
+      throw error2;
+    });
+    return { error: null, data };
+  } catch (error2) {
+    return { error: error2, data: null };
+  }
+};
 
 // src/utils/isPropertyAccessible.ts
 function isPropertyAccessible(obj, key) {
   try {
     obj[key];
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -244,6 +843,13 @@ var RESPONSE_STATUS_CODES_WITHOUT_BODY = /* @__PURE__ */ new Set([
   204,
   205,
   304
+]);
+var RESPONSE_STATUS_CODES_WITH_REDIRECT = /* @__PURE__ */ new Set([
+  301,
+  302,
+  303,
+  307,
+  308
 ]);
 function isResponseWithoutBody(status) {
   return RESPONSE_STATUS_CODES_WITHOUT_BODY.has(status);
@@ -271,38 +877,38 @@ function isResponseError(response) {
 }
 
 // src/utils/isNodeLikeError.ts
-function isNodeLikeError(error) {
-  if (error == null) {
+function isNodeLikeError(error2) {
+  if (error2 == null) {
     return false;
   }
-  if (!(error instanceof Error)) {
+  if (!(error2 instanceof Error)) {
     return false;
   }
-  return "code" in error && "errno" in error;
+  return "code" in error2 && "errno" in error2;
 }
 
 // src/utils/handleRequest.ts
 async function handleRequest(options) {
-  const handleResponse = (response) => {
+  const handleResponse = async (response) => {
     if (response instanceof Error) {
       options.onError(response);
     } else if (isResponseError(response)) {
       options.onRequestError(response);
     } else {
-      options.onResponse(response);
+      await options.onResponse(response);
     }
     return true;
   };
-  const handleResponseError = (error) => {
-    if (error instanceof InterceptorError) {
+  const handleResponseError = async (error2) => {
+    if (error2 instanceof InterceptorError) {
       throw result.error;
     }
-    if (isNodeLikeError(error)) {
-      options.onError(error);
+    if (isNodeLikeError(error2)) {
+      options.onError(error2);
       return true;
     }
-    if (error instanceof Response) {
-      return handleResponse(error);
+    if (error2 instanceof Response) {
+      return await handleResponse(error2);
     }
     return false;
   };
@@ -314,7 +920,7 @@ async function handleRequest(options) {
       options.controller[kResponsePromise].resolve(void 0);
     }
   });
-  const requestAbortPromise = new DeferredPromise2();
+  const requestAbortPromise = new DeferredPromise();
   if (options.request.signal) {
     options.request.signal.addEventListener(
       "abort",
@@ -344,7 +950,7 @@ async function handleRequest(options) {
     return true;
   }
   if (result.error) {
-    if (handleResponseError(result.error)) {
+    if (await handleResponseError(result.error)) {
       return true;
     }
     if (options.emitter.listenerCount("unhandledException") > 0) {
@@ -395,17 +1001,175 @@ function createRequestId() {
   return Math.random().toString(16).slice(2);
 }
 
+// src/interceptors/fetch/utils/createNetworkError.ts
+function createNetworkError(cause) {
+  return Object.assign(new TypeError("Failed to fetch"), {
+    cause
+  });
+}
+
+// src/interceptors/fetch/utils/followRedirect.ts
+var REQUEST_BODY_HEADERS = [
+  "content-encoding",
+  "content-language",
+  "content-location",
+  "content-type",
+  "content-length"
+];
+var kRedirectCount = Symbol("kRedirectCount");
+async function followFetchRedirect(request, response) {
+  if (response.status !== 303 && request.body != null) {
+    return Promise.reject(createNetworkError());
+  }
+  const requestUrl = new URL(request.url);
+  let locationUrl;
+  try {
+    locationUrl = new URL(response.headers.get("location"), request.url);
+  } catch (error2) {
+    return Promise.reject(createNetworkError(error2));
+  }
+  if (!(locationUrl.protocol === "http:" || locationUrl.protocol === "https:")) {
+    return Promise.reject(
+      createNetworkError("URL scheme must be a HTTP(S) scheme")
+    );
+  }
+  if (Reflect.get(request, kRedirectCount) > 20) {
+    return Promise.reject(createNetworkError("redirect count exceeded"));
+  }
+  Object.defineProperty(request, kRedirectCount, {
+    value: (Reflect.get(request, kRedirectCount) || 0) + 1
+  });
+  if (request.mode === "cors" && (locationUrl.username || locationUrl.password) && !sameOrigin(requestUrl, locationUrl)) {
+    return Promise.reject(
+      createNetworkError('cross origin not allowed for request mode "cors"')
+    );
+  }
+  const requestInit = {};
+  if ([301, 302].includes(response.status) && request.method === "POST" || response.status === 303 && !["HEAD", "GET"].includes(request.method)) {
+    requestInit.method = "GET";
+    requestInit.body = null;
+    REQUEST_BODY_HEADERS.forEach((headerName) => {
+      request.headers.delete(headerName);
+    });
+  }
+  if (!sameOrigin(requestUrl, locationUrl)) {
+    request.headers.delete("authorization");
+    request.headers.delete("proxy-authorization");
+    request.headers.delete("cookie");
+    request.headers.delete("host");
+  }
+  requestInit.headers = request.headers;
+  return fetch(new Request(locationUrl, requestInit));
+}
+function sameOrigin(left, right) {
+  if (left.origin === right.origin && left.origin === "null") {
+    return true;
+  }
+  if (left.protocol === right.protocol && left.hostname === right.hostname && left.port === right.port) {
+    return true;
+  }
+  return false;
+}
+
+// src/interceptors/fetch/utils/brotli-decompress.browser.ts
+var BrotliDecompressionStream = class extends TransformStream {
+  constructor() {
+    console.warn(
+      "[Interceptors]: Brotli decompression of response streams is not supported in the browser"
+    );
+    super({
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+      }
+    });
+  }
+};
+
+// src/interceptors/fetch/utils/decompression.ts
+var PipelineStream = class extends TransformStream {
+  constructor(transformStreams, ...strategies) {
+    super({}, ...strategies);
+    const readable = [super.readable, ...transformStreams].reduce(
+      (readable2, transform) => readable2.pipeThrough(transform)
+    );
+    Object.defineProperty(this, "readable", {
+      get() {
+        return readable;
+      }
+    });
+  }
+};
+function parseContentEncoding(contentEncoding) {
+  return contentEncoding.toLowerCase().split(",").map((coding) => coding.trim());
+}
+function createDecompressionStream(contentEncoding) {
+  if (contentEncoding === "") {
+    return null;
+  }
+  const codings = parseContentEncoding(contentEncoding);
+  if (codings.length === 0) {
+    return null;
+  }
+  const transformers = codings.reduceRight(
+    (transformers2, coding) => {
+      if (coding === "gzip" || coding === "x-gzip") {
+        return transformers2.concat(new DecompressionStream("gzip"));
+      } else if (coding === "deflate") {
+        return transformers2.concat(new DecompressionStream("deflate"));
+      } else if (coding === "br") {
+        return transformers2.concat(new BrotliDecompressionStream());
+      } else {
+        transformers2.length = 0;
+      }
+      return transformers2;
+    },
+    []
+  );
+  return new PipelineStream(transformers);
+}
+function decompressResponse(response) {
+  if (response.body === null) {
+    return null;
+  }
+  const decompressionStream = createDecompressionStream(
+    response.headers.get("content-encoding") || ""
+  );
+  if (!decompressionStream) {
+    return null;
+  }
+  response.body.pipeTo(decompressionStream.writable);
+  return decompressionStream.readable;
+}
+
+// src/utils/hasConfigurableGlobal.ts
+function hasConfigurableGlobal(propertyName) {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, propertyName);
+  if (typeof descriptor === "undefined") {
+    return false;
+  }
+  if (typeof descriptor.set === "undefined" && !descriptor.configurable) {
+    console.error(
+      `[MSW] Failed to apply interceptor: the global \`${propertyName}\` property is non-configurable. This is likely an issue with your environment. If you are using a framework, please open an issue about this in their repository.`
+    );
+    return false;
+  }
+  return true;
+}
+
 // src/interceptors/fetch/index.ts
-var _FetchInterceptor = class extends Interceptor {
+var FetchInterceptor = class _FetchInterceptor extends Interceptor {
+  static {
+    this.symbol = Symbol("fetch");
+  }
   constructor() {
     super(_FetchInterceptor.symbol);
   }
   checkEnvironment() {
-    return typeof globalThis !== "undefined" && typeof globalThis.fetch !== "undefined";
+    return hasConfigurableGlobal("fetch");
   }
   async setup() {
     const pureFetch = globalThis.fetch;
-    invariant2(
+    invariant(
       !pureFetch[IS_PATCHED_MODULE],
       'Failed to patch the "fetch" module: already patched.'
     );
@@ -413,7 +1177,7 @@ var _FetchInterceptor = class extends Interceptor {
       const requestId = createRequestId();
       const resolvedInput = typeof input === "string" && typeof location !== "undefined" && !canParseUrl(input) ? new URL(input, location.origin) : input;
       const request = new Request(resolvedInput, init);
-      const responsePromise = new DeferredPromise3();
+      const responsePromise = new DeferredPromise();
       const controller = new RequestController(request);
       this.logger.info("[%s] %s", request.method, request.url);
       this.logger.info("awaiting for the mocked response...");
@@ -426,9 +1190,34 @@ var _FetchInterceptor = class extends Interceptor {
         requestId,
         emitter: this.emitter,
         controller,
-        onResponse: async (response) => {
+        onResponse: async (rawResponse) => {
           this.logger.info("received mocked response!", {
-            response
+            rawResponse
+          });
+          const decompressedStream = decompressResponse(rawResponse);
+          const response = decompressedStream === null ? rawResponse : new Response(decompressedStream, rawResponse);
+          if (RESPONSE_STATUS_CODES_WITH_REDIRECT.has(response.status)) {
+            if (request.redirect === "error") {
+              responsePromise.reject(createNetworkError("unexpected redirect"));
+              return;
+            }
+            if (request.redirect === "follow") {
+              followFetchRedirect(request, response).then(
+                (response2) => {
+                  responsePromise.resolve(response2);
+                },
+                (reason) => {
+                  responsePromise.reject(reason);
+                }
+              );
+              return;
+            }
+          }
+          Object.defineProperty(response, "url", {
+            writable: false,
+            enumerable: true,
+            configurable: false,
+            value: request.url
           });
           if (this.emitter.listenerCount("response") > 0) {
             this.logger.info('emitting the "response" event...');
@@ -442,21 +1231,15 @@ var _FetchInterceptor = class extends Interceptor {
               requestId
             });
           }
-          Object.defineProperty(response, "url", {
-            writable: false,
-            enumerable: true,
-            configurable: false,
-            value: request.url
-          });
           responsePromise.resolve(response);
         },
         onRequestError: (response) => {
           this.logger.info("request has errored!", { response });
           responsePromise.reject(createNetworkError(response));
         },
-        onError: (error) => {
-          this.logger.info("request has been aborted!", { error });
-          responsePromise.reject(error);
+        onError: (error2) => {
+          this.logger.info("request has been aborted!", { error: error2 });
+          responsePromise.reject(error2);
         }
       });
       if (isRequestHandled) {
@@ -466,12 +1249,12 @@ var _FetchInterceptor = class extends Interceptor {
       this.logger.info(
         "no mocked response received, performing request as-is..."
       );
-      return pureFetch(request).then((response) => {
+      return pureFetch(request).then(async (response) => {
         this.logger.info("original fetch performed", response);
         if (this.emitter.listenerCount("response") > 0) {
           this.logger.info('emitting the "response" event...');
           const responseClone = response.clone();
-          this.emitter.emit("response", {
+          await emitAsync(this.emitter, "response", {
             response: responseClone,
             isMockedResponse: false,
             request,
@@ -498,20 +1281,6 @@ var _FetchInterceptor = class extends Interceptor {
     });
   }
 };
-var FetchInterceptor = _FetchInterceptor;
-FetchInterceptor.symbol = Symbol("fetch");
-function createNetworkError(cause) {
-  return Object.assign(new TypeError("Failed to fetch"), {
-    cause
-  });
-}
-
-// src/interceptors/XMLHttpRequest/index.ts
-import { invariant as invariant4 } from "outvariant";
-
-// src/interceptors/XMLHttpRequest/XMLHttpRequestController.ts
-import { invariant as invariant3 } from "outvariant";
-import { isNodeProcess } from "is-node-process";
 
 // src/interceptors/XMLHttpRequest/utils/concatArrayBuffer.ts
 function concatArrayBuffer(left, right) {
@@ -524,10 +1293,10 @@ function concatArrayBuffer(left, right) {
 // src/interceptors/XMLHttpRequest/polyfills/EventPolyfill.ts
 var EventPolyfill = class {
   constructor(type, options) {
-    this.AT_TARGET = 0;
-    this.BUBBLING_PHASE = 0;
-    this.CAPTURING_PHASE = 0;
     this.NONE = 0;
+    this.CAPTURING_PHASE = 1;
+    this.AT_TARGET = 2;
+    this.BUBBLING_PHASE = 3;
     this.type = "";
     this.srcElement = null;
     this.currentTarget = null;
@@ -543,8 +1312,8 @@ var EventPolyfill = class {
     this.cancelBubble = false;
     this.returnValue = true;
     this.type = type;
-    this.target = (options == null ? void 0 : options.target) || null;
-    this.currentTarget = (options == null ? void 0 : options.currentTarget) || null;
+    this.target = options?.target || null;
+    this.currentTarget = options?.currentTarget || null;
     this.timeStamp = Date.now();
   }
   composedPath() {
@@ -568,10 +1337,10 @@ var EventPolyfill = class {
 var ProgressEventPolyfill = class extends EventPolyfill {
   constructor(type, init) {
     super(type);
-    this.lengthComputable = (init == null ? void 0 : init.lengthComputable) || false;
-    this.composed = (init == null ? void 0 : init.composed) || false;
-    this.loaded = (init == null ? void 0 : init.loaded) || 0;
-    this.total = (init == null ? void 0 : init.total) || 0;
+    this.lengthComputable = init?.lengthComputable || false;
+    this.composed = init?.composed || false;
+    this.loaded = init?.loaded || 0;
+    this.total = init?.total || 0;
   }
 };
 
@@ -590,8 +1359,8 @@ function createEvent(target, type, init) {
   const ProgressEventClass = SUPPORTS_PROGRESS_EVENT ? ProgressEvent : ProgressEventPolyfill;
   const event = progressEvents.includes(type) ? new ProgressEventClass(type, {
     lengthComputable: true,
-    loaded: (init == null ? void 0 : init.loaded) || 0,
-    total: (init == null ? void 0 : init.total) || 0
+    loaded: init?.loaded || 0,
+    total: init?.total || 0
   }) : new EventPolyfill(type, {
     target,
     currentTarget: target
@@ -649,7 +1418,7 @@ function optionsToProxyHandler(options) {
         propertySource,
         propertyName
       );
-      if (typeof (ownDescriptors == null ? void 0 : ownDescriptors.set) !== "undefined") {
+      if (typeof ownDescriptors?.set !== "undefined") {
         ownDescriptors.set.apply(target, [nextValue]);
         return true;
       }
@@ -731,16 +1500,30 @@ function createHeadersFromXMLHttpReqestHeaders(headersString) {
   return headers;
 }
 
+// src/interceptors/XMLHttpRequest/utils/getBodyByteLength.ts
+async function getBodyByteLength(input) {
+  const explicitContentLength = input.headers.get("content-length");
+  if (explicitContentLength != null && explicitContentLength !== "") {
+    return Number(explicitContentLength);
+  }
+  const buffer = await input.arrayBuffer();
+  return buffer.byteLength;
+}
+
 // src/interceptors/XMLHttpRequest/XMLHttpRequestController.ts
-var IS_MOCKED_RESPONSE = Symbol("isMockedResponse");
-var IS_NODE = isNodeProcess();
+var kIsRequestHandled = Symbol("kIsRequestHandled");
+var IS_NODE2 = isNodeProcess();
+var kFetchRequest = Symbol("kFetchRequest");
+kIsRequestHandled, kFetchRequest;
 var XMLHttpRequestController = class {
   constructor(initialRequest, logger) {
     this.initialRequest = initialRequest;
     this.logger = logger;
     this.method = "GET";
     this.url = null;
+    this[kIsRequestHandled] = false;
     this.events = /* @__PURE__ */ new Map();
+    this.uploadEvents = /* @__PURE__ */ new Map();
     this.requestId = createRequestId();
     this.requestHeaders = new Headers();
     this.responseBuffer = new Uint8Array();
@@ -760,7 +1543,6 @@ var XMLHttpRequestController = class {
         }
       },
       methodCall: ([methodName, args], invoke) => {
-        var _a;
         switch (methodName) {
           case "open": {
             const [method, url] = args;
@@ -789,9 +1571,6 @@ var XMLHttpRequestController = class {
           }
           case "send": {
             const [body] = args;
-            if (body != null) {
-              this.requestBody = typeof body === "string" ? encodeBuffer(body) : body;
-            }
             this.request.addEventListener("load", () => {
               if (typeof this.onResponse !== "undefined") {
                 const fetchResponse = createResponse(
@@ -805,24 +1584,26 @@ var XMLHttpRequestController = class {
                 );
                 this.onResponse.call(this, {
                   response: fetchResponse,
-                  isMockedResponse: IS_MOCKED_RESPONSE in this.request,
+                  isMockedResponse: this[kIsRequestHandled],
                   request: fetchRequest,
                   requestId: this.requestId
                 });
               }
             });
-            const fetchRequest = this.toFetchApiRequest();
-            const onceRequestSettled = ((_a = this.onRequest) == null ? void 0 : _a.call(this, {
+            const requestBody = typeof body === "string" ? encodeBuffer(body) : body;
+            const fetchRequest = this.toFetchApiRequest(requestBody);
+            this[kFetchRequest] = fetchRequest.clone();
+            const onceRequestSettled = this.onRequest?.call(this, {
               request: fetchRequest,
               requestId: this.requestId
-            })) || Promise.resolve();
+            }) || Promise.resolve();
             onceRequestSettled.finally(() => {
-              if (this.request.readyState < this.request.LOADING) {
+              if (!this[kIsRequestHandled]) {
                 this.logger.info(
                   "request callback settled but request has not been handled (readystate %d), performing as-is...",
                   this.request.readyState
                 );
-                if (IS_NODE) {
+                if (IS_NODE2) {
                   this.request.setRequestHeader(
                     INTERNAL_REQUEST_ID_HEADER_NAME,
                     this.requestId
@@ -839,6 +1620,39 @@ var XMLHttpRequestController = class {
         }
       }
     });
+    define(
+      this.request,
+      "upload",
+      createProxy(this.request.upload, {
+        setProperty: ([propertyName, nextValue], invoke) => {
+          switch (propertyName) {
+            case "onloadstart":
+            case "onprogress":
+            case "onaboart":
+            case "onerror":
+            case "onload":
+            case "ontimeout":
+            case "onloadend": {
+              const eventName = propertyName.slice(
+                2
+              );
+              this.registerUploadEvent(eventName, nextValue);
+            }
+          }
+          return invoke();
+        },
+        methodCall: ([methodName, args], invoke) => {
+          switch (methodName) {
+            case "addEventListener": {
+              const [eventName, listener] = args;
+              this.registerUploadEvent(eventName, listener);
+              this.logger.info("upload.addEventListener", eventName, listener);
+              return invoke();
+            }
+          }
+        }
+      })
+    );
   }
   registerEvent(eventName, listener) {
     const prevEvents = this.events.get(eventName) || [];
@@ -846,17 +1660,44 @@ var XMLHttpRequestController = class {
     this.events.set(eventName, nextEvents);
     this.logger.info('registered event "%s"', eventName, listener);
   }
+  registerUploadEvent(eventName, listener) {
+    const prevEvents = this.uploadEvents.get(eventName) || [];
+    const nextEvents = prevEvents.concat(listener);
+    this.uploadEvents.set(eventName, nextEvents);
+    this.logger.info('registered upload event "%s"', eventName, listener);
+  }
   /**
    * Responds to the current request with the given
    * Fetch API `Response` instance.
    */
-  respondWith(response) {
+  async respondWith(response) {
+    this[kIsRequestHandled] = true;
+    if (this[kFetchRequest]) {
+      const totalRequestBodyLength = await getBodyByteLength(
+        this[kFetchRequest]
+      );
+      this.trigger("loadstart", this.request.upload, {
+        loaded: 0,
+        total: totalRequestBodyLength
+      });
+      this.trigger("progress", this.request.upload, {
+        loaded: totalRequestBodyLength,
+        total: totalRequestBodyLength
+      });
+      this.trigger("load", this.request.upload, {
+        loaded: totalRequestBodyLength,
+        total: totalRequestBodyLength
+      });
+      this.trigger("loadend", this.request.upload, {
+        loaded: totalRequestBodyLength,
+        total: totalRequestBodyLength
+      });
+    }
     this.logger.info(
       "responding with a mocked response: %d %s",
       response.status,
       response.statusText
     );
-    define(this.request, IS_MOCKED_RESPONSE, true);
     define(this.request, "status", response.status);
     define(this.request, "statusText", response.statusText);
     define(this.request, "responseURL", this.url.href);
@@ -911,14 +1752,9 @@ var XMLHttpRequestController = class {
         get: () => this.responseXML
       }
     });
-    const totalResponseBodyLength = response.headers.has("Content-Length") ? Number(response.headers.get("Content-Length")) : (
-      /**
-       * @todo Infer the response body length from the response body.
-       */
-      void 0
-    );
+    const totalResponseBodyLength = await getBodyByteLength(response.clone());
     this.logger.info("calculated response body length", totalResponseBodyLength);
-    this.trigger("loadstart", {
+    this.trigger("loadstart", this.request, {
       loaded: 0,
       total: totalResponseBodyLength
     });
@@ -927,11 +1763,11 @@ var XMLHttpRequestController = class {
     const finalizeResponse = () => {
       this.logger.info("finalizing the mocked response...");
       this.setReadyState(this.request.DONE);
-      this.trigger("load", {
+      this.trigger("load", this.request, {
         loaded: this.responseBuffer.byteLength,
         total: totalResponseBodyLength
       });
-      this.trigger("loadend", {
+      this.trigger("loadend", this.request, {
         loaded: this.responseBuffer.byteLength,
         total: totalResponseBodyLength
       });
@@ -949,7 +1785,7 @@ var XMLHttpRequestController = class {
         if (value) {
           this.logger.info("read response body chunk:", value);
           this.responseBuffer = concatArrayBuffer(this.responseBuffer, value);
-          this.trigger("progress", {
+          this.trigger("progress", this.request, {
             loaded: this.responseBuffer.byteLength,
             total: totalResponseBodyLength
           });
@@ -1007,7 +1843,7 @@ var XMLHttpRequestController = class {
     }
   }
   get responseText() {
-    invariant3(
+    invariant(
       this.request.responseType === "" || this.request.responseType === "text",
       "InvalidStateError: The object is in invalid state."
     );
@@ -1019,7 +1855,7 @@ var XMLHttpRequestController = class {
     return responseText;
   }
   get responseXML() {
-    invariant3(
+    invariant(
       this.request.responseType === "" || this.request.responseType === "document",
       "InvalidStateError: The object is in invalid state."
     );
@@ -1041,11 +1877,12 @@ var XMLHttpRequestController = class {
     }
     return null;
   }
-  errorWith(error) {
+  errorWith(error2) {
+    this[kIsRequestHandled] = true;
     this.logger.info("responding with an error");
     this.setReadyState(this.request.DONE);
-    this.trigger("error");
-    this.trigger("loadend");
+    this.trigger("error", this.request);
+    this.trigger("loadend", this.request);
   }
   /**
    * Transitions this request's `readyState` to the given one.
@@ -1064,36 +1901,38 @@ var XMLHttpRequestController = class {
     this.logger.info("set readyState to: %d", nextReadyState);
     if (nextReadyState !== this.request.UNSENT) {
       this.logger.info('triggerring "readystatechange" event...');
-      this.trigger("readystatechange");
+      this.trigger("readystatechange", this.request);
     }
   }
   /**
    * Triggers given event on the `XMLHttpRequest` instance.
    */
-  trigger(eventName, options) {
-    const callback = this.request[`on${eventName}`];
-    const event = createEvent(this.request, eventName, options);
+  trigger(eventName, target, options) {
+    const callback = target[`on${eventName}`];
+    const event = createEvent(target, eventName, options);
     this.logger.info('trigger "%s"', eventName, options || "");
     if (typeof callback === "function") {
       this.logger.info('found a direct "%s" callback, calling...', eventName);
-      callback.call(this.request, event);
+      callback.call(target, event);
     }
-    for (const [registeredEventName, listeners] of this.events) {
+    const events = target instanceof XMLHttpRequestUpload ? this.uploadEvents : this.events;
+    for (const [registeredEventName, listeners] of events) {
       if (registeredEventName === eventName) {
         this.logger.info(
           'found %d listener(s) for "%s" event, calling...',
           listeners.length,
           eventName
         );
-        listeners.forEach((listener) => listener.call(this.request, event));
+        listeners.forEach((listener) => listener.call(target, event));
       }
     }
   }
   /**
    * Converts this `XMLHttpRequest` instance into a Fetch API `Request` instance.
    */
-  toFetchApiRequest() {
+  toFetchApiRequest(body) {
     this.logger.info("converting request to a Fetch API Request...");
+    const resolvedBody = body instanceof Document ? body.documentElement.innerText : body;
     const fetchRequest = new Request(this.url.href, {
       method: this.method,
       headers: this.requestHeaders,
@@ -1101,7 +1940,7 @@ var XMLHttpRequestController = class {
        * @see https://xhr.spec.whatwg.org/#cross-origin-credentials
        */
       credentials: this.request.withCredentials ? "include" : "same-origin",
-      body: ["GET", "HEAD"].includes(this.method) ? null : this.requestBody
+      body: ["GET", "HEAD"].includes(this.method.toUpperCase()) ? null : resolvedBody
     });
     const proxyHeaders = createProxy(fetchRequest.headers, {
       methodCall: ([methodName, args], invoke) => {
@@ -1182,16 +2021,16 @@ function createXMLHttpRequestProxy({
           requestId,
           controller,
           emitter,
-          onResponse: (response) => {
-            this.respondWith(response);
+          onResponse: async (response) => {
+            await this.respondWith(response);
           },
           onRequestError: () => {
             this.errorWith(new TypeError("Network error"));
           },
-          onError: (error) => {
-            this.logger.info("request errored!", { error });
-            if (error instanceof Error) {
-              this.errorWith(error);
+          onError: (error2) => {
+            this.logger.info("request errored!", { error: error2 });
+            if (error2 instanceof Error) {
+              this.errorWith(error2);
             }
           }
         });
@@ -1225,18 +2064,21 @@ function createXMLHttpRequestProxy({
 }
 
 // src/interceptors/XMLHttpRequest/index.ts
-var _XMLHttpRequestInterceptor = class extends Interceptor {
+var XMLHttpRequestInterceptor = class _XMLHttpRequestInterceptor extends Interceptor {
+  static {
+    this.interceptorSymbol = Symbol("xhr");
+  }
   constructor() {
     super(_XMLHttpRequestInterceptor.interceptorSymbol);
   }
   checkEnvironment() {
-    return typeof globalThis.XMLHttpRequest !== "undefined";
+    return hasConfigurableGlobal("XMLHttpRequest");
   }
   setup() {
     const logger = this.logger.extend("setup");
     logger.info('patching "XMLHttpRequest" module...');
     const PureXMLHttpRequest = globalThis.XMLHttpRequest;
-    invariant4(
+    invariant(
       !PureXMLHttpRequest[IS_PATCHED_MODULE],
       'Failed to patch the "XMLHttpRequest" module: already patched.'
     );
@@ -1265,8 +2107,6 @@ var _XMLHttpRequestInterceptor = class extends Interceptor {
     });
   }
 };
-var XMLHttpRequestInterceptor = _XMLHttpRequestInterceptor;
-XMLHttpRequestInterceptor.interceptorSymbol = Symbol("xhr");
 
 // src/presets/browser.ts
 var browser_default = [
