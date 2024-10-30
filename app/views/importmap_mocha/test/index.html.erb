@@ -6,6 +6,7 @@
 <% if Rails.application.config.importmap_mocha_scripts.size > 0 %>
   <%= javascript_include_tag *Rails.application.config.importmap_mocha_scripts %>
 <% end %>
+<%= favicon_link_tag %>
 <%= javascript_include_tag 'mocha' %>
 <%= stylesheet_link_tag 'mocha' %>
 <%= javascript_importmap_tags 'importmap_mocha' %>
