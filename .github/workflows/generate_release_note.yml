@@ -1,0 +1,16 @@
+name: Generate Release Note
+
+on:
+  push:
+    tags:
+      - '*'
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Generate release note
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
