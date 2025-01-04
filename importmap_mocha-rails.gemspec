@@ -20,5 +20,5 @@ Gem::Specification.new do |spec|
     Dir['app/**/*', 'config/**/*', 'lib/**/*', 'vendor/**/*', 'MIT-LICENSE', 'Rakefile', 'README.md']
   end
 
-  spec.add_dependency 'importmap-rails', '~> 2.0.0'
+  spec.add_dependency 'importmap-rails', '>= 2.0.0'
 end
