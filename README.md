@@ -3,6 +3,8 @@
 This plugin makes it easy to test ES modules with [importmap-rails](https://github.com/rails/importmap-rails) when using Rails 7 or later.
 It integrates the [Mocha](https://mochajs.org/) JavaScript testing library (using [Chai](https://www.chaijs.com/) as the assertion library, [@mswjs/interceptors](https://github.com/mswjs/interceptors) as the mocking library) and runs tests for ES modules delivered with importmap in the browser.
 
+[More useful in combination with the rails_live_reload gem](#use-with-rails_live_reload-gem)
+
 # Installation
 
 Assuming you have already installed importmap-rails with Rails 7, add the following to your Gemfile and run `bundle install`.
@@ -84,6 +86,39 @@ describe('clear controller', () => {
 * config.importmap_mocha_style: The style of the test code, `"bdd"` or `"tdd"`. Default is `"bdd"`.
 * config.importmap_mocha_path: The location where the test code is stored. Default is `test/javascripts` and `spec/javascripts`.
 * config.importmap_mocha_scripts: The scripts to be loaded globally. e.g. `['jquery.js']`.
+
+# Use with Rails_Live_Reload gem
+
+It is strongly recommended to use with [rails_live_reload](https://github.com/railsjazz/rails_live_reload)
+
+![](./images/screencast01.gif)
+
+Add this line to your application's Gemfile:
+
+```ruby
+group :development do
+  gem "importmap_mocha_rails"
+  gem "rails_live_reload"
+end
+```
+
+And then execute:
+
+```
+bundle install
+rails generate rails_live_reload:install
+```
+
+Edit initializer
+```ruby
+# frozen_string_literal: true
+
+RailsLiveReload.configure do |config|
+  config.watch %r{app/views/.+\.(erb|haml|slim)$}
+  # Monitor JavaScript tests in addition to default paths
+  config.watch %r{(app|vendor|test)/(assets|javascript|javascripts)/\w+/(.+\.(css|js|html|png|jpg|ts|jsx)).*}, reload: :always
+end if defined?(RailsLiveReload)
+```
 
 # Author
 
