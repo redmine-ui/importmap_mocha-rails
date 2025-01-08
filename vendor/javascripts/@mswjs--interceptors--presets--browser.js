@@ -837,23 +837,6 @@ function isPropertyAccessible(obj, key) {
 }
 
 // src/utils/responseUtils.ts
-var RESPONSE_STATUS_CODES_WITHOUT_BODY = /* @__PURE__ */ new Set([
-  101,
-  103,
-  204,
-  205,
-  304
-]);
-var RESPONSE_STATUS_CODES_WITH_REDIRECT = /* @__PURE__ */ new Set([
-  301,
-  302,
-  303,
-  307,
-  308
-]);
-function isResponseWithoutBody(status) {
-  return RESPONSE_STATUS_CODES_WITHOUT_BODY.has(status);
-}
 function createServerErrorResponse(body) {
   return new Response(
     JSON.stringify(
@@ -922,13 +905,17 @@ async function handleRequest(options) {
   });
   const requestAbortPromise = new DeferredPromise();
   if (options.request.signal) {
-    options.request.signal.addEventListener(
-      "abort",
-      () => {
-        requestAbortPromise.reject(options.request.signal.reason);
-      },
-      { once: true }
-    );
+    if (options.request.signal.aborted) {
+      requestAbortPromise.reject(options.request.signal.reason);
+    } else {
+      options.request.signal.addEventListener(
+        "abort",
+        () => {
+          requestAbortPromise.reject(options.request.signal.reason);
+        },
+        { once: true }
+      );
+    }
   }
   const result = await until(async () => {
     const requestListtenersPromise = emitAsync(options.emitter, "request", {
@@ -1147,6 +1134,12 @@ function hasConfigurableGlobal(propertyName) {
   if (typeof descriptor === "undefined") {
     return false;
   }
+  if (typeof descriptor.get === "function" && typeof descriptor.get() === "undefined") {
+    return false;
+  }
+  if (typeof descriptor.get === "undefined" && descriptor.value == null) {
+    return false;
+  }
   if (typeof descriptor.set === "undefined" && !descriptor.configurable) {
     console.error(
       `[MSW] Failed to apply interceptor: the global \`${propertyName}\` property is non-configurable. This is likely an issue with your environment. If you are using a framework, please open an issue about this in their repository.`
@@ -1155,6 +1148,83 @@ function hasConfigurableGlobal(propertyName) {
   }
   return true;
 }
+
+// src/utils/fetchUtils.ts
+var FetchResponse = class _FetchResponse extends Response {
+  static {
+    /**
+     * Response status codes for responses that cannot have body.
+     * @see https://fetch.spec.whatwg.org/#statuses
+     */
+    this.STATUS_CODES_WITHOUT_BODY = [101, 103, 204, 205, 304];
+  }
+  static {
+    this.STATUS_CODES_WITH_REDIRECT = [301, 302, 303, 307, 308];
+  }
+  static isConfigurableStatusCode(status) {
+    return status >= 200 && status <= 599;
+  }
+  static isRedirectResponse(status) {
+    return _FetchResponse.STATUS_CODES_WITH_REDIRECT.includes(status);
+  }
+  /**
+   * Returns a boolean indicating whether the given response status
+   * code represents a response that can have a body.
+   */
+  static isResponseWithBody(status) {
+    return !_FetchResponse.STATUS_CODES_WITHOUT_BODY.includes(status);
+  }
+  static setUrl(url, response) {
+    if (!url) {
+      return;
+    }
+    if (response.url != "") {
+      return;
+    }
+    Object.defineProperty(response, "url", {
+      value: url,
+      enumerable: true,
+      configurable: true,
+      writable: false
+    });
+  }
+  /**
+   * Parses the given raw HTTP headers into a Fetch API `Headers` instance.
+   */
+  static parseRawHeaders(rawHeaders) {
+    const headers = new Headers();
+    for (let line = 0; line < rawHeaders.length; line += 2) {
+      headers.append(rawHeaders[line], rawHeaders[line + 1]);
+    }
+    return headers;
+  }
+  constructor(body, init = {}) {
+    const status = init.status ?? 200;
+    const safeStatus = _FetchResponse.isConfigurableStatusCode(status) ? status : 200;
+    const finalBody = _FetchResponse.isResponseWithBody(status) ? body : null;
+    super(finalBody, {
+      ...init,
+      status: safeStatus
+    });
+    if (status !== safeStatus) {
+      const stateSymbol = Object.getOwnPropertySymbols(this).find(
+        (symbol) => symbol.description === "state"
+      );
+      if (stateSymbol) {
+        const state = Reflect.get(this, stateSymbol);
+        Reflect.set(state, "status", status);
+      } else {
+        Object.defineProperty(this, "status", {
+          value: status,
+          enumerable: true,
+          configurable: true,
+          writable: false
+        });
+      }
+    }
+    _FetchResponse.setUrl(init.url, this);
+  }
+};
 
 // src/interceptors/fetch/index.ts
 var FetchInterceptor = class _FetchInterceptor extends Interceptor {
@@ -1195,8 +1265,9 @@ var FetchInterceptor = class _FetchInterceptor extends Interceptor {
             rawResponse
           });
           const decompressedStream = decompressResponse(rawResponse);
-          const response = decompressedStream === null ? rawResponse : new Response(decompressedStream, rawResponse);
-          if (RESPONSE_STATUS_CODES_WITH_REDIRECT.has(response.status)) {
+          const response = decompressedStream === null ? rawResponse : new FetchResponse(decompressedStream, rawResponse);
+          FetchResponse.setUrl(request.url, response);
+          if (FetchResponse.isRedirectResponse(response.status)) {
             if (request.redirect === "error") {
               responsePromise.reject(createNetworkError("unexpected redirect"));
               return;
@@ -1213,12 +1284,6 @@ var FetchInterceptor = class _FetchInterceptor extends Interceptor {
               return;
             }
           }
-          Object.defineProperty(response, "url", {
-            writable: false,
-            enumerable: true,
-            configurable: false,
-            value: request.url
-          });
           if (this.emitter.listenerCount("response") > 0) {
             this.logger.info('emitting the "response" event...');
             await emitAsync(this.emitter, "response", {
@@ -1477,8 +1542,9 @@ function parseJson(data) {
 
 // src/interceptors/XMLHttpRequest/utils/createResponse.ts
 function createResponse(request, body) {
-  const responseBodyOrNull = isResponseWithoutBody(request.status) ? null : body;
-  return new Response(responseBodyOrNull, {
+  const responseBodyOrNull = FetchResponse.isResponseWithBody(request.status) ? body : null;
+  return new FetchResponse(responseBodyOrNull, {
+    url: request.responseURL,
     status: request.status,
     statusText: request.statusText,
     headers: createHeadersFromXMLHttpReqestHeaders(
