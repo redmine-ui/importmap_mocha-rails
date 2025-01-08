@@ -3,6 +3,12 @@
 This plugin makes it easy to test ES modules with [importmap-rails](https://github.com/rails/importmap-rails) when using Rails 7 or later.
 It integrates the [Mocha](https://mochajs.org/) JavaScript testing library (using [Chai](https://www.chaijs.com/) as the assertion library, [@mswjs/interceptors](https://github.com/mswjs/interceptors) as the mocking library) and runs tests for ES modules delivered with importmap in the browser.
 
+| Library                                   | Version |
+|-------------------------------------------|---------|
+| [Mocha](https://mochajs.org/)             | 11.1.0  |
+| [Chai](https://www.chaijs.com/)           | 5.1.2   |
+| [@mswjs/interceptors](https://github.com/mswjs/interceptors) | 0.37.5 |
+
 [More useful in combination with the rails_live_reload gem](#use-with-rails_live_reload-gem)
 
 # Installation
